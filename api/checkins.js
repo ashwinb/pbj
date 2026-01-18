@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres'
-import { ensureSchema, seedBuckets } from './_lib/db.js'
+import { ensureSchema } from './_lib/db.js'
 import { readJson, sendJson, methodNotAllowed } from './_lib/http.js'
 import { requireUser } from './_lib/auth.js'
 
@@ -22,7 +22,6 @@ export default async function handler(req, res) {
   if (!auth) return
 
   await ensureSchema()
-  await seedBuckets()
 
   if (req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`)

@@ -47,16 +47,26 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
   `
+
+  // Clean up duplicate buckets and add unique constraint
+  await sql`
+    DELETE FROM buckets
+    WHERE id NOT IN (
+      SELECT MIN(id) FROM buckets GROUP BY name
+    );
+  `
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS buckets_name_unique ON buckets (name);
+  `
 }
 
 export async function seedBuckets() {
-  const { rows } = await sql`SELECT COUNT(*)::int AS count FROM buckets;`
-  if (rows[0]?.count > 0) return
-
   for (const bucket of DEFAULT_BUCKETS) {
     await sql`
       INSERT INTO buckets (name, sort_order)
-      VALUES (${bucket.name}, ${bucket.sortOrder});
+      VALUES (${bucket.name}, ${bucket.sortOrder})
+      ON CONFLICT (name) DO NOTHING;
     `
   }
 }
