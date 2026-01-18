@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
 import './App.css'
+import { daysInMonth, formatMonth, monthLabel, todayISO } from './dateUtils'
 
 type User = {
   id: number
@@ -30,27 +31,6 @@ const formatter = new Intl.DateTimeFormat('en-US', {
 const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
   weekday: 'short',
 })
-
-function formatMonth(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-}
-
-function daysInMonth(month: string) {
-  const [year, monthPart] = month.split('-').map(Number)
-  return new Date(year, monthPart, 0).getDate()
-}
-
-function monthLabel(month: string) {
-  const [year, monthPart] = month.split('-').map(Number)
-  return new Date(year, monthPart - 1, 1).toLocaleString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-function todayISO() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -405,7 +385,7 @@ function App() {
                         const intensity = bucketCount ? count / bucketCount : 0
                         const shade = Math.min(1, intensity)
                         const style = {
-                          background: `rgba(76, 175, 80, ${0.15 + shade * 0.65})`,
+                          background: `rgba(14, 116, 144, ${0.15 + shade * 0.65})`,
                         }
                         return (
                           <div key={date} className="heat-cell" style={style}>

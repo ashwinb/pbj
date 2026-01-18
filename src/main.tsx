@@ -4,7 +4,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import App from './App'
 import './index.css'
 
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
