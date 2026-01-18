@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
 import './App.css'
-import { daysInMonth, formatMonth, monthLabel, todayISO } from './dateUtils'
+import { formatMonth, todayISO } from './dateUtils'
 
 type User = {
   id: number
@@ -23,14 +23,7 @@ type Entry = {
   checked: boolean
 }
 
-const formatter = new Intl.DateTimeFormat('en-US', {
-  month: 'short',
-  day: 'numeric',
-})
-
-const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
-  weekday: 'short',
-})
+type View = 'today' | 'stats' | 'settings'
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -54,12 +47,15 @@ function App() {
   const [buckets, setBuckets] = useState<Bucket[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
-  const [selectedDate, setSelectedDate] = useState(todayISO())
   const [month, setMonth] = useState(formatMonth(new Date()))
   const [newBucket, setNewBucket] = useState('')
   const [bucketEdits, setBucketEdits] = useState<Record<number, string>>({})
   const [status, setStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [view, setView] = useState<View>('today')
+
+  const today = todayISO()
 
   const loadUser = useCallback(async () => {
     const result = await fetchJson<{ user: User | null; isAdmin: boolean }>(
@@ -157,7 +153,7 @@ function App() {
   }
 
   const handleBucketDelete = async (bucketId: number) => {
-    if (!confirm('Delete this bucket and its history?')) return
+    if (!confirm('Delete this bucket and its history for everyone?')) return
     await fetchJson('/api/buckets', {
       method: 'DELETE',
       body: JSON.stringify({ id: bucketId }),
@@ -168,11 +164,16 @@ function App() {
 
   const handleToggle = async (bucketId: number, checked: boolean) => {
     if (!user) return
-    await fetchJson('/api/checkins', {
-      method: 'POST',
-      body: JSON.stringify({ bucketId, checked, date: selectedDate }),
-    })
-    await loadCheckins(month)
+    setSaving(true)
+    try {
+      await fetchJson('/api/checkins', {
+        method: 'POST',
+        body: JSON.stringify({ bucketId, checked, date: today }),
+      })
+      await loadCheckins(month)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleAdminReset = async () => {
@@ -182,17 +183,65 @@ function App() {
     setStatus('All data reset. Default buckets restored.')
   }
 
-  const entriesByUser = useMemo(() => {
-    return entries.reduce<Record<number, Entry[]>>((acc, entry) => {
-      acc[entry.userId] = acc[entry.userId] || []
-      acc[entry.userId].push(entry)
-      return acc
-    }, {})
-  }, [entries])
+  // Calculate streak for current user
+  const userStreak = useMemo(() => {
+    if (!user || buckets.length === 0) return 0
 
-  const bucketCount = buckets.length
-  const totalDays = daysInMonth(month)
+    const userEntries = entries.filter(e => e.userId === user.id && e.checked)
 
+    let streak = 0
+    const date = new Date()
+
+    // Check if today is complete (all buckets checked)
+    const todayStr = date.toISOString().slice(0, 10)
+    const todayChecks = userEntries.filter(e => e.date === todayStr).length
+    const todayComplete = todayChecks >= buckets.length
+
+    // Start from today if complete, otherwise yesterday
+    if (!todayComplete) {
+      date.setDate(date.getDate() - 1)
+    }
+
+    // Count consecutive days with all buckets complete
+    while (true) {
+      const dateStr = date.toISOString().slice(0, 10)
+      const dayChecks = userEntries.filter(e => e.date === dateStr).length
+      if (dayChecks >= buckets.length) {
+        streak++
+        date.setDate(date.getDate() - 1)
+      } else {
+        break
+      }
+    }
+
+    return streak
+  }, [entries, user, buckets])
+
+  // Today's check status for current user
+  const userCheckedBuckets = useMemo(() => {
+    if (!user) return new Set<number>()
+    const todayEntries = entries.filter(
+      e => e.userId === user.id && e.date === today && e.checked
+    )
+    return new Set(todayEntries.map(e => e.bucketId))
+  }, [entries, user, today])
+
+  // Friends' status today
+  const friendsToday = useMemo(() => {
+    return users.map(friend => {
+      const friendEntries = entries.filter(
+        e => e.userId === friend.id && e.date === today && e.checked
+      )
+      return {
+        ...friend,
+        checked: friendEntries.length,
+        total: buckets.length,
+        complete: friendEntries.length >= buckets.length,
+      }
+    })
+  }, [users, entries, today, buckets])
+
+  // Stats data
   const userDayCompletion = useMemo(() => {
     const map = new Map<string, number>()
     for (const entry of entries) {
@@ -203,279 +252,284 @@ function App() {
     return map
   }, [entries])
 
-  const perBucketStats = useMemo(() => {
-    const stats: Record<number, Record<number, number>> = {}
-    for (const bucket of buckets) {
-      stats[bucket.id] = {}
-    }
-    for (const entry of entries) {
-      if (!entry.checked) continue
-      stats[entry.bucketId] = stats[entry.bucketId] || {}
-      stats[entry.bucketId][entry.userId] = (stats[entry.bucketId][entry.userId] || 0) + 1
-    }
-    return stats
-  }, [entries, buckets])
+  const todayFormatted = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 
-  const userEntriesForDate = useMemo(() => {
-    if (!user) return []
-    return entries.filter((entry) => entry.userId === user.id && entry.date === selectedDate)
-  }, [entries, user, selectedDate])
-
-  const userCheckedBuckets = useMemo(() => {
-    return new Set(userEntriesForDate.filter((entry) => entry.checked).map((entry) => entry.bucketId))
-  }, [userEntriesForDate])
+  const completedToday = userCheckedBuckets.size
+  const totalBuckets = buckets.length
+  const allDone = completedToday >= totalBuckets && totalBuckets > 0
 
   if (loading) {
-    return <div className="app-shell">Loading...</div>
+    return <div className="app-shell loading-screen">Loading...</div>
+  }
+
+  if (!user) {
+    return (
+      <div className="app-shell login-screen">
+        <div className="login-card">
+          <h1>Daily Habit Hub</h1>
+          <p className="tagline">Four friends, one month of momentum.</p>
+          <div className="login-cta">
+            <p>Sign in to start tracking with your friends.</p>
+            <GoogleLogin
+              onSuccess={(credentialResponse) => {
+                if (credentialResponse.credential) {
+                  void handleLogin(credentialResponse.credential)
+                }
+              }}
+              onError={() => setStatus('Google sign-in failed. Try again.')}
+            />
+          </div>
+          {status && <div className="status-banner error">{status}</div>}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="app-shell">
+      {/* Header */}
       <header className="app-header">
-        <div>
-          <p className="eyebrow">Daily Habit Hub</p>
-          <h1>Four friends, one month of momentum.</h1>
-          <p className="subtitle">
-            Check in daily, adjust the regimen as you go, and celebrate the streaks together.
-          </p>
-        </div>
-        <div className="auth-card">
-          {user ? (
-            <div className="user-info">
-              <img
-                src={user.image || 'https://placehold.co/80x80?text=🙂'}
-                alt={user.name}
-              />
-              <div>
-                <strong>{user.name}</strong>
-                <p>{user.email}</p>
-              </div>
-              <button className="secondary" onClick={handleLogout}>
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <div className="login-panel">
-              <p>Sign in with Google to start tracking together.</p>
-              <GoogleLogin
-                onSuccess={(credentialResponse) => {
-                  if (credentialResponse.credential) {
-                    void handleLogin(credentialResponse.credential)
-                  }
-                }}
-                onError={() => setStatus('Google sign-in failed. Try again.')}
-              />
-            </div>
+        <div className="header-left">
+          <span className="app-title">Daily Habit Hub</span>
+          {userStreak > 0 && (
+            <span className="streak-badge">🔥 {userStreak} day{userStreak > 1 ? 's' : ''}</span>
           )}
+        </div>
+        <div className="header-right">
+          <img
+            src={user.image || 'https://placehold.co/40x40?text=👤'}
+            alt={user.name}
+            className="avatar-small"
+          />
+          <button className="btn-text" onClick={handleLogout}>
+            Sign out
+          </button>
         </div>
       </header>
 
       {status && <div className="status-banner">{status}</div>}
 
-      {!user ? (
-        <section className="callout">
-          <h2>What you can do</h2>
-          <ul>
-            <li>Track daily exercise buckets with one tap.</li>
-            <li>Refine the regimen together as you iterate.</li>
-            <li>Review progress by day, bucket, and friend.</li>
-          </ul>
-        </section>
-      ) : (
-        <>
-          <section className="section-grid">
-            <div className="card">
-              <div className="card-header">
-                <h2>Today&apos;s check-in</h2>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                />
+      {/* Navigation */}
+      <nav className="tab-bar">
+        <button
+          className={`tab ${view === 'today' ? 'active' : ''}`}
+          onClick={() => setView('today')}
+        >
+          Today
+        </button>
+        <button
+          className={`tab ${view === 'stats' ? 'active' : ''}`}
+          onClick={() => setView('stats')}
+        >
+          Stats
+        </button>
+        {isAdmin && (
+          <button
+            className={`tab ${view === 'settings' ? 'active' : ''}`}
+            onClick={() => setView('settings')}
+          >
+            Settings
+          </button>
+        )}
+      </nav>
+
+      {/* Today View */}
+      {view === 'today' && (
+        <main className="main-content">
+          <section className="today-section">
+            <h2 className="date-heading">{todayFormatted}</h2>
+
+            {allDone && (
+              <div className="celebration">
+                🎉 All done for today!
               </div>
-              <div className="checklist">
-                {buckets.map((bucket) => (
-                  <label key={bucket.id} className="check-item">
+            )}
+
+            <div className="checklist">
+              {buckets.map((bucket) => {
+                const isChecked = userCheckedBuckets.has(bucket.id)
+                return (
+                  <label
+                    key={bucket.id}
+                    className={`check-item ${isChecked ? 'checked' : ''} ${saving ? 'saving' : ''}`}
+                  >
                     <input
                       type="checkbox"
-                      checked={userCheckedBuckets.has(bucket.id)}
-                      onChange={(event) => handleToggle(bucket.id, event.target.checked)}
+                      checked={isChecked}
+                      onChange={(e) => handleToggle(bucket.id, e.target.checked)}
+                      disabled={saving}
                     />
-                    <span>{bucket.name}</span>
+                    <span className="check-label">{bucket.name}</span>
+                    {isChecked && <span className="check-mark">✓</span>}
                   </label>
-                ))}
-                {buckets.length === 0 && <p>No buckets yet. Add one below.</p>}
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <h2>Regimen buckets</h2>
-              </div>
-              <div className="bucket-list">
-                {buckets.map((bucket) => (
-                  <div key={bucket.id} className="bucket-row">
-                    <input
-                      value={bucketEdits[bucket.id] || ''}
-                      onChange={(event) =>
-                        setBucketEdits((prev) => ({
-                          ...prev,
-                          [bucket.id]: event.target.value,
-                        }))
-                      }
-                    />
-                    <div className="bucket-actions">
-                      <button onClick={() => handleBucketSave(bucket.id)}>Save</button>
-                      <button className="secondary" onClick={() => handleBucketDelete(bucket.id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                <div className="bucket-row add-row">
-                  <input
-                    placeholder="Add a new bucket"
-                    value={newBucket}
-                    onChange={(event) => setNewBucket(event.target.value)}
-                  />
-                  <button onClick={handleBucketAdd}>Add</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="card">
-            <div className="card-header">
-              <div>
-                <h2>Monthly progress</h2>
-                <p className="muted">{monthLabel(month)}</p>
-              </div>
-              <input
-                type="month"
-                value={month}
-                onChange={(event) => setMonth(event.target.value)}
-              />
-            </div>
-
-            <div className="progress-grid">
-              {users.map((friend) => {
-                const friendEntries = entriesByUser[friend.id] || []
-                const completedCount = friendEntries.filter((entry) => entry.checked).length
-                const totalPossible = bucketCount * totalDays
-                const percent = totalPossible ? Math.round((completedCount / totalPossible) * 100) : 0
-
-                return (
-                  <div key={friend.id} className="friend-card">
-                    <div className="friend-header">
-                      <img
-                        src={friend.image || 'https://placehold.co/64x64?text=🙂'}
-                        alt={friend.name}
-                      />
-                      <div>
-                        <strong>{friend.name}</strong>
-                        <p>{percent}% completed</p>
-                      </div>
-                    </div>
-
-                    <div className="heatmap">
-                      {Array.from({ length: totalDays }).map((_, index) => {
-                        const day = index + 1
-                        const date = `${month}-${String(day).padStart(2, '0')}`
-                        const count = userDayCompletion.get(`${friend.id}-${date}`) || 0
-                        const intensity = bucketCount ? count / bucketCount : 0
-                        const shade = Math.min(1, intensity)
-                        const style = {
-                          background: `rgba(14, 116, 144, ${0.15 + shade * 0.65})`,
-                        }
-                        return (
-                          <div key={date} className="heat-cell" style={style}>
-                            <span>{day}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    <div className="friend-summary">
-                      <div>
-                        <span className="label">Total checkmarks</span>
-                        <strong>{completedCount}</strong>
-                      </div>
-                      <div>
-                        <span className="label">Daily average</span>
-                        <strong>
-                          {totalDays ? (completedCount / totalDays).toFixed(1) : '0.0'}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
                 )
               })}
+              {buckets.length === 0 && (
+                <p className="empty-state">No habits set up yet. Ask an admin to add some!</p>
+              )}
+            </div>
+
+            <div className="progress-ring">
+              <span className="progress-text">
+                {completedToday}/{totalBuckets}
+              </span>
             </div>
           </section>
 
-          <section className="card">
-            <div className="card-header">
-              <h2>Per-bucket stats</h2>
-            </div>
-            <div className="bucket-stats">
-              {buckets.map((bucket) => (
-                <div key={bucket.id} className="bucket-stat-card">
-                  <h3>{bucket.name}</h3>
-                  <div className="stat-list">
-                    {users.map((friend) => (
-                      <div key={friend.id} className="stat-row">
-                        <span>{friend.name}</span>
-                        <strong>{perBucketStats[bucket.id]?.[friend.id] || 0}</strong>
-                      </div>
-                    ))}
-                  </div>
+          <section className="friends-section">
+            <h3>Friends today</h3>
+            <div className="friends-grid">
+              {friendsToday.map((friend) => (
+                <div
+                  key={friend.id}
+                  className={`friend-chip ${friend.complete ? 'complete' : ''} ${friend.id === user.id ? 'is-you' : ''}`}
+                >
+                  <img
+                    src={friend.image || 'https://placehold.co/32x32?text=👤'}
+                    alt={friend.name}
+                  />
+                  <span className="friend-name">{friend.name.split(' ')[0]}</span>
+                  <span className="friend-score">
+                    {friend.checked}/{friend.total}
+                    {friend.complete && ' ✓'}
+                  </span>
                 </div>
               ))}
             </div>
           </section>
+        </main>
+      )}
 
-          <section className="card">
-            <div className="card-header">
-              <h2>Weekly cadence</h2>
-              <p className="muted">A quick glance at check-ins for {formatter.format(new Date())}.</p>
+      {/* Stats View */}
+      {view === 'stats' && (
+        <main className="main-content">
+          <section className="stats-section">
+            <div className="stats-header">
+              <h2>Monthly Progress</h2>
+              <input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="month-picker"
+              />
             </div>
-            <div className="week-grid">
-              {Array.from({ length: 7 }).map((_, index) => {
-                const date = new Date()
-                date.setDate(date.getDate() - (6 - index))
-                const dateStr = date.toISOString().slice(0, 10)
+
+            <div className="stats-grid">
+              {users.map((friend) => {
+                const friendEntries = entries.filter(e => e.userId === friend.id && e.checked)
+                const completedCount = friendEntries.length
+                const [year, monthPart] = month.split('-').map(Number)
+                const daysInMonth = new Date(year, monthPart, 0).getDate()
+                const totalPossible = buckets.length * daysInMonth
+                const percent = totalPossible
+                  ? Math.round((completedCount / totalPossible) * 100)
+                  : 0
+
                 return (
-                  <div key={dateStr} className="week-cell">
-                    <span>{weekdayFormatter.format(date)}</span>
-                    <strong>{formatter.format(date)}</strong>
-                    <div className="week-entries">
-                      {users.map((friend) => {
-                        const count = userDayCompletion.get(`${friend.id}-${dateStr}`) || 0
+                  <div key={friend.id} className="stat-card">
+                    <div className="stat-card-header">
+                      <img
+                        src={friend.image || 'https://placehold.co/48x48?text=👤'}
+                        alt={friend.name}
+                      />
+                      <div>
+                        <strong>{friend.name}</strong>
+                        <span className="stat-percent">{percent}%</span>
+                      </div>
+                    </div>
+                    <div className="heatmap">
+                      {Array.from({ length: daysInMonth }).map((_, i) => {
+                        const day = i + 1
+                        const date = `${month}-${String(day).padStart(2, '0')}`
+                        const count = userDayCompletion.get(`${friend.id}-${date}`) || 0
+                        const intensity = buckets.length ? count / buckets.length : 0
                         return (
-                          <span key={friend.id}>
-                            {friend.name.split(' ')[0]}: {count}/{bucketCount}
-                          </span>
+                          <div
+                            key={date}
+                            className="heat-cell"
+                            style={{
+                              opacity: 0.2 + intensity * 0.8,
+                              background: intensity > 0 ? 'var(--accent)' : 'var(--border)',
+                            }}
+                            title={`${date}: ${count}/${buckets.length}`}
+                          >
+                            {day}
+                          </div>
                         )
                       })}
+                    </div>
+                    <div className="stat-summary">
+                      <span>{completedCount} checkmarks</span>
+                      <span>{(completedCount / daysInMonth).toFixed(1)} / day avg</span>
                     </div>
                   </div>
                 )
               })}
             </div>
           </section>
+        </main>
+      )}
 
-          {isAdmin && (
-            <section className="card admin-card">
-              <div>
-                <h2>Admin controls</h2>
-                <p className="muted">Reset all buckets and check-ins. Sessions remain intact.</p>
+      {/* Settings View (Admin Only) */}
+      {view === 'settings' && isAdmin && (
+        <main className="main-content">
+          <section className="settings-section">
+            <h2>Manage Habits</h2>
+            <p className="settings-note">Changes affect all users.</p>
+
+            <div className="bucket-list">
+              {buckets.map((bucket) => (
+                <div key={bucket.id} className="bucket-row">
+                  <input
+                    value={bucketEdits[bucket.id] || ''}
+                    onChange={(e) =>
+                      setBucketEdits((prev) => ({
+                        ...prev,
+                        [bucket.id]: e.target.value,
+                      }))
+                    }
+                    className="bucket-input"
+                  />
+                  <div className="bucket-actions">
+                    <button className="btn-small" onClick={() => handleBucketSave(bucket.id)}>
+                      Save
+                    </button>
+                    <button
+                      className="btn-small btn-danger"
+                      onClick={() => handleBucketDelete(bucket.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="bucket-row add-row">
+                <input
+                  placeholder="New habit name..."
+                  value={newBucket}
+                  onChange={(e) => setNewBucket(e.target.value)}
+                  className="bucket-input"
+                  onKeyDown={(e) => e.key === 'Enter' && handleBucketAdd()}
+                />
+                <button className="btn-small btn-primary" onClick={handleBucketAdd}>
+                  Add
+                </button>
               </div>
-              <button className="danger" onClick={handleAdminReset}>
-                Reset data
+            </div>
+
+            <div className="danger-zone">
+              <h3>Danger Zone</h3>
+              <p>Reset all data and restore default habits.</p>
+              <button className="btn-danger" onClick={handleAdminReset}>
+                Reset All Data
               </button>
-            </section>
-          )}
-        </>
+            </div>
+          </section>
+        </main>
       )}
     </div>
   )
