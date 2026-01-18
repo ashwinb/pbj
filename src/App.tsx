@@ -57,14 +57,6 @@ function App() {
 
   const today = todayISO()
 
-  const loadUser = useCallback(async () => {
-    const result = await fetchJson<{ user: User | null; isAdmin: boolean }>(
-      '/api/auth/me'
-    )
-    setUser(result.user)
-    setIsAdmin(result.isAdmin)
-  }, [])
-
   const loadBuckets = useCallback(async () => {
     const result = await fetchJson<{ buckets: Bucket[] }>('/api/buckets')
     setBuckets(result.buckets)
@@ -141,11 +133,37 @@ function App() {
 
   const handleLogin = async (credential: string) => {
     setStatus(null)
-    await fetchJson('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ credential }),
-    })
-    await loadUser()
+    setLoading(true)
+    try {
+      await fetchJson('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ credential }),
+      })
+      const result = await fetchJson<{ user: User | null; isAdmin: boolean }>(
+        '/api/auth/me'
+      )
+      setUser(result.user)
+      setIsAdmin(result.isAdmin)
+
+      if (result.user) {
+        const [bucketsResult, checkinsResult] = await Promise.all([
+          fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
+          fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+        ])
+        setBuckets(bucketsResult.buckets)
+        setBucketEdits(
+          bucketsResult.buckets.reduce<Record<number, string>>((acc, bucket) => {
+            acc[bucket.id] = bucket.name
+            return acc
+          }, {})
+        )
+        setUsers(checkinsResult.users)
+        setEntries(checkinsResult.entries)
+        setInitialLoadDone(true)
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLogout = async () => {
