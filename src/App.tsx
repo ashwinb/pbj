@@ -53,7 +53,7 @@ function App() {
   const [status, setStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [view, setView] = useState<View>('today')
+  const [view, setView] = useState<View>('stats')
 
   const today = todayISO()
 
@@ -286,6 +286,22 @@ function App() {
   }, [users, entries, today, buckets])
 
   // Stats data
+  const daysInMonth = useMemo(() => {
+    const [year, monthPart] = month.split('-').map(Number)
+    return new Date(year, monthPart, 0).getDate()
+  }, [month])
+
+  const totalPossible = buckets.length * daysInMonth
+
+  const monthlyCompletionCounts = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const entry of entries) {
+      if (!entry.checked) continue
+      map.set(entry.userId, (map.get(entry.userId) || 0) + 1)
+    }
+    return map
+  }, [entries])
+
   const userDayCompletion = useMemo(() => {
     const map = new Map<string, number>()
     for (const entry of entries) {
@@ -360,16 +376,16 @@ function App() {
       {/* Navigation */}
       <nav className="tab-bar">
         <button
-          className={`tab ${view === 'today' ? 'active' : ''}`}
-          onClick={() => setView('today')}
-        >
-          Today
-        </button>
-        <button
           className={`tab ${view === 'stats' ? 'active' : ''}`}
           onClick={() => setView('stats')}
         >
-          Stats
+          Overview
+        </button>
+        <button
+          className={`tab ${view === 'today' ? 'active' : ''}`}
+          onClick={() => setView('today')}
+        >
+          Check-in
         </button>
         {isAdmin && (
           <button
@@ -453,7 +469,10 @@ function App() {
         <main className="main-content">
           <section className="stats-section">
             <div className="stats-header">
-              <h2>Monthly Progress</h2>
+              <div>
+                <p className="section-eyebrow">Friends overview</p>
+                <h2>How everyone is doing</h2>
+              </div>
               <input
                 type="month"
                 value={month}
@@ -462,13 +481,57 @@ function App() {
               />
             </div>
 
+            <div className="overview-grid">
+              {friendsToday.map((friend) => {
+                const completedCount = monthlyCompletionCounts.get(friend.id) || 0
+                const percent = totalPossible
+                  ? Math.round((completedCount / totalPossible) * 100)
+                  : 0
+
+                return (
+                  <div
+                    key={friend.id}
+                    className={`overview-card ${friend.complete ? 'complete' : ''} ${
+                      friend.id === user.id ? 'is-you' : ''
+                    }`}
+                  >
+                    <div className="overview-card-header">
+                      <img
+                        src={friend.image || 'https://placehold.co/48x48?text=👤'}
+                        alt={friend.name}
+                      />
+                      <div>
+                        <strong>{friend.name}</strong>
+                        <span className="overview-subtitle">Today&apos;s progress</span>
+                      </div>
+                    </div>
+                    <div className="overview-metrics">
+                      <div>
+                        <span className="metric-label">Today</span>
+                        <span className="metric-value">
+                          {friend.checked}/{friend.total}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="metric-label">Month</span>
+                        <span className="metric-value">{percent}%</span>
+                      </div>
+                    </div>
+                    <div className="overview-progress">
+                      <span
+                        style={{
+                          width: `${friend.total ? (friend.checked / friend.total) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
             <div className="stats-grid">
               {users.map((friend) => {
-                const friendEntries = entries.filter(e => e.userId === friend.id && e.checked)
-                const completedCount = friendEntries.length
-                const [year, monthPart] = month.split('-').map(Number)
-                const daysInMonth = new Date(year, monthPart, 0).getDate()
-                const totalPossible = buckets.length * daysInMonth
+                const completedCount = monthlyCompletionCounts.get(friend.id) || 0
                 const percent = totalPossible
                   ? Math.round((completedCount / totalPossible) * 100)
                   : 0
