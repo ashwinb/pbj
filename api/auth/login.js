@@ -1,7 +1,7 @@
 import { OAuth2Client } from 'google-auth-library'
 import { sql } from '@vercel/postgres'
 import { ensureSchema } from '../_lib/db.js'
-import { createSession, setSessionCookie } from '../_lib/auth.js'
+import { createSession, isAllowedEmail, setSessionCookie } from '../_lib/auth.js'
 import { readJson, sendJson, methodNotAllowed } from '../_lib/http.js'
 
 const client = new OAuth2Client()
@@ -28,6 +28,10 @@ export default async function handler(req, res) {
 
   if (!profile?.email) {
     return sendJson(res, 401, { error: 'Unable to verify Google account' })
+  }
+
+  if (!isAllowedEmail(profile.email)) {
+    return sendJson(res, 403, { error: 'Email is not authorized' })
   }
 
   await ensureSchema()
