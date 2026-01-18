@@ -95,23 +95,49 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
-        await loadUser()
+        const result = await fetchJson<{ user: User | null; isAdmin: boolean }>(
+          '/api/auth/me'
+        )
+        setUser(result.user)
+        setIsAdmin(result.isAdmin)
+
+        // If user is logged in, load data before showing UI
+        if (result.user) {
+          const [bucketsResult, checkinsResult] = await Promise.all([
+            fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
+            fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+          ])
+          setBuckets(bucketsResult.buckets)
+          setBucketEdits(
+            bucketsResult.buckets.reduce<Record<number, string>>((acc, bucket) => {
+              acc[bucket.id] = bucket.name
+              return acc
+            }, {})
+          )
+          setUsers(checkinsResult.users)
+          setEntries(checkinsResult.entries)
+        }
       } finally {
         setLoading(false)
       }
     }
     init()
-  }, [loadUser])
+  }, [])
+
+  // Reload data when month changes (but not on initial mount - that's handled in init)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
 
   useEffect(() => {
-    if (!user) return
-    void reloadAll()
-  }, [user, reloadAll])
-
-  useEffect(() => {
-    if (!user) return
+    if (!user || !initialLoadDone) return
     void loadCheckins(month)
-  }, [month, loadCheckins, user])
+  }, [month, loadCheckins, user, initialLoadDone])
+
+  // Mark initial load as done after first render with data
+  useEffect(() => {
+    if (!loading && user) {
+      setInitialLoadDone(true)
+    }
+  }, [loading, user])
 
   const handleLogin = async (credential: string) => {
     setStatus(null)
