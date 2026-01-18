@@ -5,10 +5,29 @@ import { ensureSchema } from './db.js'
 
 const SESSION_COOKIE = 'pbj_session'
 const SESSION_DAYS = 45
+const ALLOWED_EMAILS = new Set([
+  'ameet.jain@gmail.com',
+  'phanindra.ganti@gmail.com',
+  'sumit.sanghai@gmail.com',
+  'ashwinb@gmail.com',
+])
 const ADMIN_EMAILS = new Set(['ashwinb@gmail.com'])
 
+function normalizeEmail(email) {
+  if (!email) return ''
+  const normalized = email.trim().toLowerCase()
+  if (normalized.endsWith('@gmail')) {
+    return `${normalized}.com`
+  }
+  return normalized
+}
+
 export function isAdminEmail(email) {
-  return ADMIN_EMAILS.has(email)
+  return ADMIN_EMAILS.has(normalizeEmail(email))
+}
+
+export function isAllowedEmail(email) {
+  return ALLOWED_EMAILS.has(normalizeEmail(email))
 }
 
 function hashToken(token) {
@@ -74,6 +93,11 @@ export async function getUserFromRequest(req) {
   if (!session) return { user: null, isAdmin: false, sessionId: null }
 
   if (new Date(session.expires_at) < new Date()) {
+    await sql`DELETE FROM sessions WHERE id = ${session.session_id};`
+    return { user: null, isAdmin: false, sessionId: null }
+  }
+
+  if (!isAllowedEmail(session.email)) {
     await sql`DELETE FROM sessions WHERE id = ${session.session_id};`
     return { user: null, isAdmin: false, sessionId: null }
   }
