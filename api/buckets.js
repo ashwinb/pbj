@@ -1,5 +1,5 @@
 import { sql } from './_lib/sql.js'
-import { ensureSchema, seedBuckets } from './_lib/db.js'
+import { ensureSchema } from './_lib/db.js'
 import { readJson, sendJson, methodNotAllowed } from './_lib/http.js'
 import { requireUser } from './_lib/auth.js'
 
@@ -14,7 +14,6 @@ export default async function handler(req, res) {
   await ensureSchema()
 
   if (req.method === 'GET') {
-    await seedBuckets()
     const { rows } = await sql`
       SELECT id, name, sort_order AS "sortOrder"
       FROM buckets
