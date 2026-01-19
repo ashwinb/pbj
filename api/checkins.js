@@ -61,6 +61,16 @@ export default async function handler(req, res) {
   const checked = payload.checked !== false
   const date = payload.date
 
+  // Validate date is within editable range (today and past 2 days)
+  const todayDate = new Date().toISOString().slice(0, 10)
+  const earliest = new Date()
+  earliest.setDate(earliest.getDate() - 2)
+  const earliestDate = earliest.toISOString().slice(0, 10)
+
+  if (date < earliestDate || date > todayDate) {
+    return sendJson(res, 400, { error: 'Can only edit entries for today and past 2 days' })
+  }
+
   await sql`
     INSERT INTO entries (user_id, bucket_id, date, checked)
     VALUES (${auth.user.id}, ${payload.bucketId}, ${date}, ${checked})

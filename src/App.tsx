@@ -56,6 +56,22 @@ function App() {
   const [view, setView] = useState<View>('stats')
 
   const today = todayISO()
+  const [selectedDate, setSelectedDate] = useState(today)
+
+  // Dates that can be edited: today, yesterday, day before yesterday
+  const editableDates = useMemo(() => {
+    const dates: { date: string; label: string }[] = []
+    const labels = ['Today', 'Yesterday', '2 days ago']
+    for (let i = 0; i < 3; i++) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      dates.push({
+        date: d.toISOString().slice(0, 10),
+        label: labels[i],
+      })
+    }
+    return dates
+  }, [])
 
   const loadBuckets = useCallback(async () => {
     const result = await fetchJson<{ buckets: Bucket[] }>('/api/buckets')
@@ -212,7 +228,7 @@ function App() {
     try {
       await fetchJson('/api/checkins', {
         method: 'POST',
-        body: JSON.stringify({ bucketId, checked, date: today }),
+        body: JSON.stringify({ bucketId, checked, date: selectedDate }),
       })
       await loadCheckins(month)
     } finally {
@@ -261,14 +277,14 @@ function App() {
     return streak
   }, [entries, user, buckets])
 
-  // Today's check status for current user
+  // Check status for current user on selected date
   const userCheckedBuckets = useMemo(() => {
     if (!user) return new Set<number>()
-    const todayEntries = entries.filter(
-      e => e.userId === user.id && e.date === today && e.checked
+    const dayEntries = entries.filter(
+      e => e.userId === user.id && e.date === selectedDate && e.checked
     )
-    return new Set(todayEntries.map(e => e.bucketId))
-  }, [entries, user, today])
+    return new Set(dayEntries.map(e => e.bucketId))
+  }, [entries, user, selectedDate])
 
   // Friends' status today
   const friendsToday = useMemo(() => {
@@ -312,11 +328,15 @@ function App() {
     return map
   }, [entries])
 
-  const todayFormatted = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-  })
+  const selectedDateFormatted = useMemo(() => {
+    const [year, month, day] = selectedDate.split('-').map(Number)
+    const d = new Date(year, month - 1, day)
+    return d.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    })
+  }, [selectedDate])
 
   const completedToday = userCheckedBuckets.size
   const totalBuckets = buckets.length
@@ -401,11 +421,23 @@ function App() {
       {view === 'today' && (
         <main className="main-content">
           <section className="today-section">
-            <h2 className="date-heading">{todayFormatted}</h2>
+            <h2 className="date-heading">{selectedDateFormatted}</h2>
+
+            <div className="date-selector">
+              {editableDates.map(({ date, label }) => (
+                <button
+                  key={date}
+                  className={`date-btn ${date === selectedDate ? 'active' : ''}`}
+                  onClick={() => setSelectedDate(date)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             {allDone && (
               <div className="celebration">
-                🎉 All done for today!
+                🎉 All done{selectedDate === today ? ' for today' : ''}!
               </div>
             )}
 
