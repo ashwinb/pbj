@@ -66,7 +66,7 @@ function App() {
   const [loadingMonth, setLoadingMonth] = useState(false)
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState<View>('stats')
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[]; note?: string } | null>(null)
   const [devEmail, setDevEmail] = useState('')
 
   // Auto-clear status messages after 3 seconds
@@ -820,7 +820,6 @@ function App() {
                           date,
                           ...checkedNames,
                           ...uncheckedNames,
-                          ...(friendNote?.notes ? ['', `"${friendNote.notes}"`] : []),
                         ]
 
                         let bg = 'var(--border)'
@@ -850,6 +849,7 @@ function App() {
                                 x: rect.left + rect.width / 2,
                                 y: rect.top,
                                 content: tooltipContent,
+                                note: friendNote?.notes,
                               })
                             }}
                             onMouseLeave={isInactive || loadingMonth ? undefined : () => setTooltip(null)}
@@ -953,6 +953,9 @@ function App() {
               {line}
             </div>
           ))}
+          {tooltip.note && (
+            <div className="tooltip-note">"{tooltip.note}"</div>
+          )}
         </div>
       )}
     </div>

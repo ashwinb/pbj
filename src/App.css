@@ -807,11 +807,14 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
-.heatmap-tooltip div:last-child:not(.tooltip-date) {
+.heatmap-tooltip .tooltip-note {
   font-style: italic;
   color: var(--ink-muted);
   max-width: 200px;
   white-space: normal;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 .stat-summary {
