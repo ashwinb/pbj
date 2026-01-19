@@ -4,7 +4,8 @@ import './App.css'
 import { formatMonth, todayISO } from './dateUtils'
 
 // Epoch date - dates before this are grayed out and don't count toward stats
-const EPOCH_DATE = '2026-01-18'
+// In dev mode, use an old date so all test data is visible
+const EPOCH_DATE = import.meta.env.VITE_DEV_AUTH === 'true' ? '2000-01-01' : '2026-01-18'
 
 type User = {
   id: number
