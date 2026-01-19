@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres'
+import { sql } from './sql.js'
 
 const DEFAULT_BUCKETS = [
   { name: '10 min calisthenics', sortOrder: 1 },

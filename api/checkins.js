@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres'
+import { sql } from './_lib/sql.js'
 import { ensureSchema } from './_lib/db.js'
 import { readJson, sendJson, methodNotAllowed } from './_lib/http.js'
 import { requireUser } from './_lib/auth.js'

@@ -9,13 +9,15 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:seed": "node scripts/seed-test-data.js"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.4",
     "@vercel/postgres": "^0.10.0",
     "cookie": "^1.1.1",
     "google-auth-library": "^10.5.0",
+    "pg": "^8.17.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

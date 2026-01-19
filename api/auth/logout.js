@@ -1,4 +1,4 @@
-import { sql } from '@vercel/postgres'
+import { sql } from '../_lib/sql.js'
 import { clearSessionCookie, getUserFromRequest } from '../_lib/auth.js'
 import { sendJson, methodNotAllowed } from '../_lib/http.js'
 

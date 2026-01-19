@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'crypto'
 import { parse, serialize } from 'cookie'
-import { sql } from '@vercel/postgres'
+import { sql } from './sql.js'
 import { ensureSchema } from './db.js'
 
 const SESSION_COOKIE = 'pbj_session'
@@ -12,6 +12,10 @@ const ALLOWED_EMAILS = new Set([
   'ashwinb@gmail.com',
 ])
 const ADMIN_EMAILS = new Set(['ashwinb@gmail.com'])
+
+function isDevMode() {
+  return process.env.DEV_AUTH === 'true'
+}
 
 function normalizeEmail(email) {
   if (!email) return ''
@@ -27,6 +31,7 @@ export function isAdminEmail(email) {
 }
 
 export function isAllowedEmail(email) {
+  if (isDevMode()) return true
   return ALLOWED_EMAILS.has(normalizeEmail(email))
 }
 

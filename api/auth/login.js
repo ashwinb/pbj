@@ -1,5 +1,5 @@
 import { OAuth2Client } from 'google-auth-library'
-import { sql } from '@vercel/postgres'
+import { sql } from '../_lib/sql.js'
 import { ensureSchema } from '../_lib/db.js'
 import { createSession, isAllowedEmail, setSessionCookie } from '../_lib/auth.js'
 import { readJson, sendJson, methodNotAllowed } from '../_lib/http.js'

@@ -52,9 +52,13 @@ function App() {
   const [bucketEdits, setBucketEdits] = useState<Record<number, string>>({})
   const [status, setStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMonth, setLoadingMonth] = useState(false)
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState<View>('stats')
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null)
+  const [devEmail, setDevEmail] = useState('')
+
+  const isDevMode = import.meta.env.VITE_DEV_AUTH === 'true'
 
   const today = todayISO()
   const [selectedDate, setSelectedDate] = useState(today)
@@ -88,11 +92,16 @@ function App() {
 
   const loadCheckins = useCallback(
     async (monthValue: string) => {
-      const result = await fetchJson<{ users: User[]; entries: Entry[] }>(
-        `/api/checkins?month=${monthValue}`
-      )
-      setUsers(result.users)
-      setEntries(result.entries)
+      setLoadingMonth(true)
+      try {
+        const result = await fetchJson<{ users: User[]; entries: Entry[] }>(
+          `/api/checkins?month=${monthValue}`
+        )
+        setUsers(result.users)
+        setEntries(result.entries)
+      } finally {
+        setLoadingMonth(false)
+      }
     },
     []
   )
@@ -139,6 +148,7 @@ function App() {
 
   useEffect(() => {
     if (!user || !initialLoadDone) return
+    setTooltip(null)
     void loadCheckins(month)
   }, [month, loadCheckins, user, initialLoadDone])
 
@@ -192,6 +202,43 @@ function App() {
     setBuckets([])
     setUsers([])
     setEntries([])
+  }
+
+  const handleDevLogin = async (email: string) => {
+    setStatus(null)
+    setLoading(true)
+    try {
+      await fetchJson('/api/auth/dev-login', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      })
+      const result = await fetchJson<{ user: User | null; isAdmin: boolean }>(
+        '/api/auth/me'
+      )
+      setUser(result.user)
+      setIsAdmin(result.isAdmin)
+
+      if (result.user) {
+        const [bucketsResult, checkinsResult] = await Promise.all([
+          fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
+          fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+        ])
+        setBuckets(bucketsResult.buckets)
+        setBucketEdits(
+          bucketsResult.buckets.reduce<Record<number, string>>((acc, bucket) => {
+            acc[bucket.id] = bucket.name
+            return acc
+          }, {})
+        )
+        setUsers(checkinsResult.users)
+        setEntries(checkinsResult.entries)
+        setInitialLoadDone(true)
+      }
+    } catch {
+      setStatus('Dev login failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleBucketAdd = async () => {
@@ -354,17 +401,51 @@ function App() {
         <div className="login-card">
           <h1>Daily Habit Hub</h1>
           <p className="tagline">Four friends, one month of momentum.</p>
-          <div className="login-cta">
-            <p>Sign in to start tracking with your friends.</p>
-            <GoogleLogin
-              onSuccess={(credentialResponse) => {
-                if (credentialResponse.credential) {
-                  void handleLogin(credentialResponse.credential)
-                }
-              }}
-              onError={() => setStatus('Google sign-in failed. Try again.')}
-            />
-          </div>
+          {isDevMode ? (
+            <div className="login-cta">
+              <p>Dev Mode - Select a test user:</p>
+              <div className="dev-login-options">
+                {['alice@test.local', 'bob@test.local', 'carol@test.local', 'dan@test.local'].map(
+                  (email) => (
+                    <button
+                      key={email}
+                      className="dev-login-btn"
+                      onClick={() => handleDevLogin(email)}
+                    >
+                      {email.split('@')[0]}
+                    </button>
+                  )
+                )}
+              </div>
+              <div className="dev-login-custom">
+                <input
+                  type="email"
+                  placeholder="Or enter custom email..."
+                  value={devEmail}
+                  onChange={(e) => setDevEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && devEmail && handleDevLogin(devEmail)}
+                />
+                <button
+                  onClick={() => devEmail && handleDevLogin(devEmail)}
+                  disabled={!devEmail}
+                >
+                  Login
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="login-cta">
+              <p>Sign in to start tracking with your friends.</p>
+              <GoogleLogin
+                onSuccess={(credentialResponse) => {
+                  if (credentialResponse.credential) {
+                    void handleLogin(credentialResponse.credential)
+                  }
+                }}
+                onError={() => setStatus('Google sign-in failed. Try again.')}
+              />
+            </div>
+          )}
           {status && <div className="status-banner error">{status}</div>}
         </div>
       </div>
@@ -501,69 +582,80 @@ function App() {
       {/* Stats View */}
       {view === 'stats' && (
         <main className="main-content">
-          <section className="stats-section">
-            <div className="stats-header">
-              <div>
-                <p className="section-eyebrow">Friends overview</p>
-                <h2>How everyone is doing</h2>
-              </div>
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => setMonth(e.target.value)}
-                className="month-picker"
-              />
-            </div>
-
-            <div className="overview-grid">
+          {/* Today Strip */}
+          <section className="today-strip">
+            <h3>Today</h3>
+            <div className="today-cards">
               {friendsToday.map((friend) => {
-                const completedCount = monthlyCompletionCounts.get(friend.id) || 0
-                const percent = totalPossible
-                  ? Math.round((completedCount / totalPossible) * 100)
-                  : 0
-
+                const checkedBucketIds = new Set(
+                  entries
+                    .filter(e => e.userId === friend.id && e.date === today && e.checked)
+                    .map(e => e.bucketId)
+                )
                 return (
                   <div
                     key={friend.id}
-                    className={`overview-card ${friend.complete ? 'complete' : ''} ${
-                      friend.id === user.id ? 'is-you' : ''
-                    }`}
+                    className={`today-card ${friend.complete ? 'complete' : ''} ${friend.id === user.id ? 'is-you' : ''}`}
                   >
-                    <div className="overview-card-header">
+                    <div className="today-card-header">
                       <img
-                        src={friend.image || 'https://placehold.co/48x48?text=👤'}
+                        src={friend.image || 'https://placehold.co/40x40?text=👤'}
                         alt={friend.name}
                       />
-                      <div>
-                        <strong>{friend.name}</strong>
-                        <span className="overview-subtitle">Today&apos;s progress</span>
-                      </div>
+                      <span className="today-card-name">{friend.name.split(' ')[0]}</span>
+                      {friend.complete && <span className="today-card-check">✓</span>}
                     </div>
-                    <div className="overview-metrics">
-                      <div>
-                        <span className="metric-label">Today</span>
-                        <span className="metric-value">
-                          {friend.checked}/{friend.total}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="metric-label">Month</span>
-                        <span className="metric-value">{percent}%</span>
-                      </div>
-                    </div>
-                    <div className="overview-progress">
-                      <span
-                        style={{
-                          width: `${friend.total ? (friend.checked / friend.total) * 100 : 0}%`,
-                        }}
-                      />
+                    <div className="today-card-buckets">
+                      {buckets.map((bucket) => (
+                        <div
+                          key={bucket.id}
+                          className={`today-bucket ${checkedBucketIds.has(bucket.id) ? 'checked' : ''}`}
+                        >
+                          {checkedBucketIds.has(bucket.id) ? '✓' : '○'} {bucket.name}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )
               })}
             </div>
+          </section>
 
-            <div className="stats-grid">
+          {/* Monthly Stats */}
+          <section className="stats-section">
+            <div className="stats-header">
+              <h2>Monthly Progress</h2>
+              <div className="month-picker">
+                <button
+                  className="month-nav"
+                  onClick={() => {
+                    const [y, m] = month.split('-').map(Number)
+                    const d = new Date(y, m - 2, 1)
+                    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+                  }}
+                >
+                  &larr;
+                </button>
+                <span className="month-label">
+                  {(() => {
+                    const [y, m] = month.split('-').map(Number)
+                    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                  })()}
+                </span>
+                <button
+                  className="month-nav"
+                  onClick={() => {
+                    const [y, m] = month.split('-').map(Number)
+                    const d = new Date(y, m, 1)
+                    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+                  }}
+                >
+                  &rarr;
+                </button>
+              </div>
+            </div>
+
+            <div className={`stats-grid ${loadingMonth ? 'loading' : ''}`}>
               {users.map((friend) => {
                 const completedCount = monthlyCompletionCounts.get(friend.id) || 0
                 const percent = totalPossible
@@ -586,6 +678,7 @@ function App() {
                       {Array.from({ length: daysInMonth }).map((_, i) => {
                         const day = i + 1
                         const date = `${month}-${String(day).padStart(2, '0')}`
+                        const isFuture = date > today
                         const count = userDayCompletion.get(`${friend.id}-${date}`) || 0
                         const intensity = buckets.length ? count / buckets.length : 0
                         const checkedBucketIds = new Set(
@@ -600,15 +693,29 @@ function App() {
                           .filter(b => !checkedBucketIds.has(b.id))
                           .map(b => `○ ${b.name}`)
                         const tooltipContent = [date, ...checkedNames, ...uncheckedNames]
+
+                        let bg = 'var(--border)'
+                        if (!isFuture && !loadingMonth) {
+                          if (intensity === 1) {
+                            bg = 'var(--accent)' // green - all done
+                          } else if (intensity >= 0.5) {
+                            bg = '#84cc16' // lime - more than half
+                          } else if (intensity > 0) {
+                            bg = '#f97316' // orange - less than half
+                          } else {
+                            bg = '#ef4444' // red - nothing done
+                          }
+                        }
+
                         return (
                           <div
                             key={date}
-                            className="heat-cell"
+                            className={`heat-cell ${isFuture ? 'future' : ''} ${loadingMonth ? 'loading' : ''}`}
                             style={{
-                              opacity: 0.2 + intensity * 0.8,
-                              background: intensity > 0 ? 'var(--accent)' : 'var(--border)',
+                              opacity: isFuture ? 0.3 : (loadingMonth ? 0.5 : (0.4 + intensity * 0.6)),
+                              background: bg,
                             }}
-                            onMouseEnter={(e) => {
+                            onMouseEnter={isFuture || loadingMonth ? undefined : (e) => {
                               const rect = e.currentTarget.getBoundingClientRect()
                               setTooltip({
                                 x: rect.left + rect.width / 2,
@@ -616,7 +723,7 @@ function App() {
                                 content: tooltipContent,
                               })
                             }}
-                            onMouseLeave={() => setTooltip(null)}
+                            onMouseLeave={isFuture || loadingMonth ? undefined : () => setTooltip(null)}
                           >
                             {day}
                           </div>
