@@ -3,6 +3,9 @@ import { GoogleLogin } from '@react-oauth/google'
 import './App.css'
 import { formatMonth, todayISO } from './dateUtils'
 
+// Epoch date - dates before this are grayed out and don't count toward stats
+const EPOCH_DATE = '2026-01-18'
+
 type User = {
   id: number
   name: string
@@ -356,16 +359,30 @@ function App() {
     return new Date(year, monthPart, 0).getDate()
   }, [month])
 
-  const totalPossible = buckets.length * daysInMonth
+  // Count only active days (between epoch and today)
+  const activeDaysInMonth = useMemo(() => {
+    let count = 0
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = `${month}-${String(day).padStart(2, '0')}`
+      if (date >= EPOCH_DATE && date <= today) {
+        count++
+      }
+    }
+    return count
+  }, [month, daysInMonth, today])
+
+  const totalPossible = buckets.length * activeDaysInMonth
 
   const monthlyCompletionCounts = useMemo(() => {
     const map = new Map<number, number>()
     for (const entry of entries) {
       if (!entry.checked) continue
+      // Only count entries from active days
+      if (entry.date < EPOCH_DATE || entry.date > today) continue
       map.set(entry.userId, (map.get(entry.userId) || 0) + 1)
     }
     return map
-  }, [entries])
+  }, [entries, today])
 
   const userDayCompletion = useMemo(() => {
     const map = new Map<string, number>()
@@ -679,6 +696,8 @@ function App() {
                         const day = i + 1
                         const date = `${month}-${String(day).padStart(2, '0')}`
                         const isFuture = date > today
+                        const isBeforeEpoch = date < EPOCH_DATE
+                        const isInactive = isFuture || isBeforeEpoch
                         const count = userDayCompletion.get(`${friend.id}-${date}`) || 0
                         const intensity = buckets.length ? count / buckets.length : 0
                         const checkedBucketIds = new Set(
@@ -695,7 +714,7 @@ function App() {
                         const tooltipContent = [date, ...checkedNames, ...uncheckedNames]
 
                         let bg = 'var(--border)'
-                        if (!isFuture && !loadingMonth) {
+                        if (!isInactive && !loadingMonth) {
                           if (intensity === 1) {
                             bg = 'var(--accent)' // green - all done
                           } else if (intensity >= 0.5) {
@@ -710,12 +729,12 @@ function App() {
                         return (
                           <div
                             key={date}
-                            className={`heat-cell ${isFuture ? 'future' : ''} ${loadingMonth ? 'loading' : ''}`}
+                            className={`heat-cell ${isInactive ? 'future' : ''} ${loadingMonth ? 'loading' : ''}`}
                             style={{
-                              opacity: isFuture ? 0.3 : (loadingMonth ? 0.5 : (0.4 + intensity * 0.6)),
+                              opacity: isInactive ? 0.3 : (loadingMonth ? 0.5 : (0.4 + intensity * 0.6)),
                               background: bg,
                             }}
-                            onMouseEnter={isFuture || loadingMonth ? undefined : (e) => {
+                            onMouseEnter={isInactive || loadingMonth ? undefined : (e) => {
                               const rect = e.currentTarget.getBoundingClientRect()
                               setTooltip({
                                 x: rect.left + rect.width / 2,
@@ -723,7 +742,7 @@ function App() {
                                 content: tooltipContent,
                               })
                             }}
-                            onMouseLeave={isFuture || loadingMonth ? undefined : () => setTooltip(null)}
+                            onMouseLeave={isInactive || loadingMonth ? undefined : () => setTooltip(null)}
                           >
                             {day}
                           </div>
@@ -732,7 +751,7 @@ function App() {
                     </div>
                     <div className="stat-summary">
                       <span>{completedCount} checkmarks</span>
-                      <span>{(completedCount / daysInMonth).toFixed(1)} / day avg</span>
+                      <span>{activeDaysInMonth > 0 ? (completedCount / activeDaysInMonth).toFixed(1) : '0'} / day avg</span>
                     </div>
                   </div>
                 )
