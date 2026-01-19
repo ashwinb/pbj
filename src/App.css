@@ -553,6 +553,33 @@ body {
   border-radius: 4px;
   font-size: 0.7rem;
   color: var(--ink);
+  cursor: pointer;
+}
+
+.heat-cell:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.heatmap-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%) translateY(-8px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 0.85rem;
+  z-index: 1000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.heatmap-tooltip .tooltip-date {
+  font-weight: 600;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
 }
 
 .stat-summary {

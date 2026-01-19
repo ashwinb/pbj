@@ -54,6 +54,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [view, setView] = useState<View>('stats')
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null)
 
   const today = todayISO()
   const [selectedDate, setSelectedDate] = useState(today)
@@ -598,7 +599,7 @@ function App() {
                         const uncheckedNames = buckets
                           .filter(b => !checkedBucketIds.has(b.id))
                           .map(b => `○ ${b.name}`)
-                        const tooltip = [date, ...checkedNames, ...uncheckedNames].join('\n')
+                        const tooltipContent = [date, ...checkedNames, ...uncheckedNames]
                         return (
                           <div
                             key={date}
@@ -607,7 +608,15 @@ function App() {
                               opacity: 0.2 + intensity * 0.8,
                               background: intensity > 0 ? 'var(--accent)' : 'var(--border)',
                             }}
-                            title={tooltip}
+                            onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setTooltip({
+                                x: rect.left + rect.width / 2,
+                                y: rect.top,
+                                content: tooltipContent,
+                              })
+                            }}
+                            onMouseLeave={() => setTooltip(null)}
                           >
                             {day}
                           </div>
@@ -682,6 +691,22 @@ function App() {
             </div>
           </section>
         </main>
+      )}
+
+      {tooltip && (
+        <div
+          className="heatmap-tooltip"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+          }}
+        >
+          {tooltip.content.map((line, i) => (
+            <div key={i} className={i === 0 ? 'tooltip-date' : undefined}>
+              {line}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
