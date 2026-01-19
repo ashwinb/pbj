@@ -370,11 +370,20 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .stats-header h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.section-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
 }
 
 .month-picker {
@@ -383,6 +392,84 @@ body {
   border-radius: var(--radius);
   background: var(--surface);
   font-size: 0.9rem;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.overview-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.overview-card.complete {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, #f0fdfa, #ecfeff);
+}
+
+.overview-card.is-you {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.overview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.overview-card-header img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.overview-subtitle {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-muted);
+}
+
+.overview-metrics {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.metric-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.overview-progress {
+  height: 6px;
+  background: var(--surface-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.overview-progress span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
 }
 
 .stats-grid {
@@ -582,6 +669,10 @@ body {
 
   .check-item {
     padding: 12px 14px;
+  }
+
+  .overview-grid {
+    grid-template-columns: 1fr;
   }
 
   .friend-chip {
