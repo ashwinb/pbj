@@ -587,6 +587,18 @@ function App() {
                         const date = `${month}-${String(day).padStart(2, '0')}`
                         const count = userDayCompletion.get(`${friend.id}-${date}`) || 0
                         const intensity = buckets.length ? count / buckets.length : 0
+                        const checkedBucketIds = new Set(
+                          entries
+                            .filter(e => e.userId === friend.id && e.date === date && e.checked)
+                            .map(e => e.bucketId)
+                        )
+                        const checkedNames = buckets
+                          .filter(b => checkedBucketIds.has(b.id))
+                          .map(b => `✓ ${b.name}`)
+                        const uncheckedNames = buckets
+                          .filter(b => !checkedBucketIds.has(b.id))
+                          .map(b => `○ ${b.name}`)
+                        const tooltip = [date, ...checkedNames, ...uncheckedNames].join('\n')
                         return (
                           <div
                             key={date}
@@ -595,7 +607,7 @@ function App() {
                               opacity: 0.2 + intensity * 0.8,
                               background: intensity > 0 ? 'var(--accent)' : 'var(--border)',
                             }}
-                            title={`${date}: ${count}/${buckets.length}`}
+                            title={tooltip}
                           >
                             {day}
                           </div>
