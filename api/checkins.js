@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     })
   }
 
-  const payload = await readJson(req)
+  const payload = req.body || await readJson(req)
   if (!payload?.bucketId || !payload?.date) {
     return sendJson(res, 400, { error: 'bucketId and date required' })
   }
