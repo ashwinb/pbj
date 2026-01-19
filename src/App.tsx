@@ -61,6 +61,13 @@ function App() {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[] } | null>(null)
   const [devEmail, setDevEmail] = useState('')
 
+  // Auto-clear status messages after 3 seconds
+  useEffect(() => {
+    if (!status) return
+    const timer = setTimeout(() => setStatus(null), 3000)
+    return () => clearTimeout(timer)
+  }, [status])
+
   const isDevMode = import.meta.env.VITE_DEV_AUTH === 'true'
 
   const today = todayISO()
@@ -244,34 +251,63 @@ function App() {
     }
   }
 
+  const [bucketSaving, setBucketSaving] = useState<number | 'add' | null>(null)
+
   const handleBucketAdd = async () => {
     if (!newBucket.trim()) return
-    await fetchJson('/api/buckets', {
-      method: 'POST',
-      body: JSON.stringify({ name: newBucket.trim() }),
-    })
-    setNewBucket('')
-    await loadBuckets()
+    setBucketSaving('add')
+    setStatus(null)
+    try {
+      await fetchJson('/api/buckets', {
+        method: 'POST',
+        body: JSON.stringify({ name: newBucket.trim() }),
+      })
+      setNewBucket('')
+      await loadBuckets()
+      setStatus('Habit added')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to add habit')
+    } finally {
+      setBucketSaving(null)
+    }
   }
 
   const handleBucketSave = async (bucketId: number) => {
     const name = bucketEdits[bucketId]
     if (!name?.trim()) return
-    await fetchJson('/api/buckets', {
-      method: 'PUT',
-      body: JSON.stringify({ id: bucketId, name: name.trim() }),
-    })
-    await loadBuckets()
+    setBucketSaving(bucketId)
+    setStatus(null)
+    try {
+      await fetchJson('/api/buckets', {
+        method: 'PUT',
+        body: JSON.stringify({ id: bucketId, name: name.trim() }),
+      })
+      await loadBuckets()
+      setStatus('Habit updated')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to update habit')
+    } finally {
+      setBucketSaving(null)
+    }
   }
 
   const handleBucketDelete = async (bucketId: number) => {
     if (!confirm('Delete this bucket and its history for everyone?')) return
-    await fetchJson('/api/buckets', {
-      method: 'DELETE',
-      body: JSON.stringify({ id: bucketId }),
-    })
-    await loadBuckets()
-    await loadCheckins(month)
+    setBucketSaving(bucketId)
+    setStatus(null)
+    try {
+      await fetchJson('/api/buckets', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: bucketId }),
+      })
+      await loadBuckets()
+      await loadCheckins(month)
+      setStatus('Habit deleted')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to delete habit')
+    } finally {
+      setBucketSaving(null)
+    }
   }
 
   const handleToggle = async (bucketId: number, checked: boolean) => {
@@ -780,14 +816,20 @@ function App() {
                       }))
                     }
                     className="bucket-input"
+                    disabled={bucketSaving !== null}
                   />
                   <div className="bucket-actions">
-                    <button className="btn-small" onClick={() => handleBucketSave(bucket.id)}>
-                      Save
+                    <button
+                      className="btn-small"
+                      onClick={() => handleBucketSave(bucket.id)}
+                      disabled={bucketSaving !== null}
+                    >
+                      {bucketSaving === bucket.id ? 'Saving...' : 'Save'}
                     </button>
                     <button
                       className="btn-small btn-danger"
                       onClick={() => handleBucketDelete(bucket.id)}
+                      disabled={bucketSaving !== null}
                     >
                       Delete
                     </button>
@@ -801,9 +843,14 @@ function App() {
                   onChange={(e) => setNewBucket(e.target.value)}
                   className="bucket-input"
                   onKeyDown={(e) => e.key === 'Enter' && handleBucketAdd()}
+                  disabled={bucketSaving !== null}
                 />
-                <button className="btn-small btn-primary" onClick={handleBucketAdd}>
-                  Add
+                <button
+                  className="btn-small btn-primary"
+                  onClick={handleBucketAdd}
+                  disabled={bucketSaving !== null}
+                >
+                  {bucketSaving === 'add' ? 'Adding...' : 'Add'}
                 </button>
               </div>
             </div>
