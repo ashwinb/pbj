@@ -61,11 +61,15 @@ export default async function handler(req, res) {
   const checked = payload.checked !== false
   const date = payload.date
 
-  // Validate date is within editable range (today and past 2 days)
-  const todayDate = new Date().toISOString().slice(0, 10)
-  const earliest = new Date()
+  // Validate date is within editable range (today and past 2 days in PST)
+  function getPSTDate(d = new Date()) {
+    return new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }))
+  }
+  const pstNow = getPSTDate()
+  const todayDate = `${pstNow.getFullYear()}-${String(pstNow.getMonth() + 1).padStart(2, '0')}-${String(pstNow.getDate()).padStart(2, '0')}`
+  const earliest = getPSTDate()
   earliest.setDate(earliest.getDate() - 2)
-  const earliestDate = earliest.toISOString().slice(0, 10)
+  const earliestDate = `${earliest.getFullYear()}-${String(earliest.getMonth() + 1).padStart(2, '0')}-${String(earliest.getDate()).padStart(2, '0')}`
 
   if (date < earliestDate || date > todayDate) {
     return sendJson(res, 400, { error: 'Can only edit entries for today and past 2 days' })

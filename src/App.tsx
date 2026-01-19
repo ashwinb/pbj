@@ -65,8 +65,9 @@ function App() {
     for (let i = 0; i < 3; i++) {
       const d = new Date()
       d.setDate(d.getDate() - i)
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       dates.push({
-        date: d.toISOString().slice(0, 10),
+        date: dateStr,
         label: labels[i],
       })
     }
