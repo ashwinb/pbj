@@ -656,11 +656,23 @@ function App() {
                 placeholder="How did it go? Any thoughts..."
                 value={noteInput}
                 onChange={(e) => setNoteInput(e.target.value)}
-                onBlur={handleSaveNote}
                 disabled={savingNote}
                 rows={3}
               />
-              {savingNote && <span className="saving-indicator">Saving...</span>}
+              <div className="notes-actions">
+                {noteInput !== currentNote && (
+                  <button
+                    className="btn-small btn-primary"
+                    onClick={handleSaveNote}
+                    disabled={savingNote}
+                  >
+                    {savingNote ? 'Saving...' : 'Save'}
+                  </button>
+                )}
+                {noteInput === currentNote && currentNote && (
+                  <span className="saved-indicator">Saved</span>
+                )}
+              </div>
             </div>
           </section>
 

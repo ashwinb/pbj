@@ -423,6 +423,19 @@ body {
   margin-top: 4px;
 }
 
+.notes-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 8px;
+  min-height: 32px;
+}
+
+.saved-indicator {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
 /* Friends Section */
 .friends-section {
   background: var(--surface);
