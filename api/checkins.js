@@ -32,24 +32,33 @@ export default async function handler(req, res) {
 
     const { start, end } = monthBounds(month)
 
-    const usersResult = await sql`
-      SELECT id, email, name, image
-      FROM users
-      ORDER BY name ASC;
-    `
-
-    const entriesResult = await sql`
-      SELECT user_id AS "userId",
-             bucket_id AS "bucketId",
-             date::text AS date,
-             checked
-      FROM entries
-      WHERE date BETWEEN ${start} AND ${end};
-    `
+    const [usersResult, entriesResult, notesResult] = await Promise.all([
+      sql`
+        SELECT id, email, name, image
+        FROM users
+        ORDER BY name ASC;
+      `,
+      sql`
+        SELECT user_id AS "userId",
+               bucket_id AS "bucketId",
+               date::text AS date,
+               checked
+        FROM entries
+        WHERE date BETWEEN ${start} AND ${end};
+      `,
+      sql`
+        SELECT user_id AS "userId",
+               date::text AS date,
+               notes
+        FROM user_notes
+        WHERE date BETWEEN ${start} AND ${end};
+      `,
+    ])
 
     return sendJson(res, 200, {
       users: usersResult.rows,
       entries: entriesResult.rows,
+      notes: notesResult.rows,
     })
   }
 

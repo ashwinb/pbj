@@ -380,6 +380,49 @@ body {
   padding: 20px;
 }
 
+/* Notes Section */
+.notes-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.notes-section label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+  margin-bottom: 8px;
+}
+
+.notes-section textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.notes-section textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.notes-section textarea:disabled {
+  background: var(--surface-alt);
+  opacity: 0.7;
+}
+
+.saving-indicator {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
 /* Friends Section */
 .friends-section {
   background: var(--surface);
@@ -749,6 +792,13 @@ body {
   margin-bottom: 4px;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
+}
+
+.heatmap-tooltip div:last-child:not(.tooltip-date) {
+  font-style: italic;
+  color: var(--ink-muted);
+  max-width: 200px;
+  white-space: normal;
 }
 
 .stat-summary {

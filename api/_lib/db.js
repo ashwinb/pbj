@@ -48,6 +48,17 @@ export async function ensureSchema() {
     );
   `
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_notes (
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      date DATE NOT NULL,
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, date)
+    );
+  `
+
   // Clean up duplicate buckets and add unique constraint
   await sql`
     DELETE FROM buckets

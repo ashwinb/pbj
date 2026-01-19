@@ -27,6 +27,12 @@ type Entry = {
   checked: boolean
 }
 
+type UserNote = {
+  userId: number
+  date: string
+  notes: string
+}
+
 type View = 'today' | 'stats' | 'settings'
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -51,6 +57,7 @@ function App() {
   const [buckets, setBuckets] = useState<Bucket[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
+  const [userNotes, setUserNotes] = useState<UserNote[]>([])
   const [month, setMonth] = useState(formatMonth(new Date()))
   const [newBucket, setNewBucket] = useState('')
   const [bucketEdits, setBucketEdits] = useState<Record<number, string>>({})
@@ -73,6 +80,8 @@ function App() {
 
   const today = todayISO()
   const [selectedDate, setSelectedDate] = useState(today)
+  const [noteInput, setNoteInput] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
 
   // Dates that can be edited: today, yesterday, day before yesterday
   const editableDates = useMemo(() => {
@@ -105,11 +114,12 @@ function App() {
     async (monthValue: string) => {
       setLoadingMonth(true)
       try {
-        const result = await fetchJson<{ users: User[]; entries: Entry[] }>(
+        const result = await fetchJson<{ users: User[]; entries: Entry[]; notes: UserNote[] }>(
           `/api/checkins?month=${monthValue}`
         )
         setUsers(result.users)
         setEntries(result.entries)
+        setUserNotes(result.notes)
       } finally {
         setLoadingMonth(false)
       }
@@ -135,7 +145,7 @@ function App() {
         if (result.user) {
           const [bucketsResult, checkinsResult] = await Promise.all([
             fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
-            fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+            fetchJson<{ users: User[]; entries: Entry[]; notes: UserNote[] }>(`/api/checkins?month=${month}`),
           ])
           setBuckets(bucketsResult.buckets)
           setBucketEdits(
@@ -146,6 +156,7 @@ function App() {
           )
           setUsers(checkinsResult.users)
           setEntries(checkinsResult.entries)
+          setUserNotes(checkinsResult.notes)
         }
       } finally {
         setLoading(false)
@@ -187,7 +198,7 @@ function App() {
       if (result.user) {
         const [bucketsResult, checkinsResult] = await Promise.all([
           fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
-          fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+          fetchJson<{ users: User[]; entries: Entry[]; notes: UserNote[] }>(`/api/checkins?month=${month}`),
         ])
         setBuckets(bucketsResult.buckets)
         setBucketEdits(
@@ -198,6 +209,7 @@ function App() {
         )
         setUsers(checkinsResult.users)
         setEntries(checkinsResult.entries)
+        setUserNotes(checkinsResult.notes)
         setInitialLoadDone(true)
       }
     } finally {
@@ -213,6 +225,7 @@ function App() {
     setBuckets([])
     setUsers([])
     setEntries([])
+    setUserNotes([])
   }
 
   const handleDevLogin = async (email: string) => {
@@ -232,7 +245,7 @@ function App() {
       if (result.user) {
         const [bucketsResult, checkinsResult] = await Promise.all([
           fetchJson<{ buckets: Bucket[] }>('/api/buckets'),
-          fetchJson<{ users: User[]; entries: Entry[] }>(`/api/checkins?month=${month}`),
+          fetchJson<{ users: User[]; entries: Entry[]; notes: UserNote[] }>(`/api/checkins?month=${month}`),
         ])
         setBuckets(bucketsResult.buckets)
         setBucketEdits(
@@ -243,6 +256,7 @@ function App() {
         )
         setUsers(checkinsResult.users)
         setEntries(checkinsResult.entries)
+        setUserNotes(checkinsResult.notes)
         setInitialLoadDone(true)
       }
     } catch {
@@ -325,6 +339,21 @@ function App() {
     }
   }
 
+  const handleSaveNote = async () => {
+    if (!user) return
+    if (noteInput === currentNote) return
+    setSavingNote(true)
+    try {
+      await fetchJson('/api/notes', {
+        method: 'POST',
+        body: JSON.stringify({ date: selectedDate, notes: noteInput }),
+      })
+      await loadCheckins(month)
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   const handleAdminReset = async () => {
     if (!confirm('Reset all buckets and check-ins for everyone?')) return
     await fetchJson('/api/admin/reset', { method: 'POST' })
@@ -374,6 +403,18 @@ function App() {
     )
     return new Set(dayEntries.map(e => e.bucketId))
   }, [entries, user, selectedDate])
+
+  // Get current user's note for selected date
+  const currentNote = useMemo(() => {
+    if (!user) return ''
+    const note = userNotes.find(n => n.userId === user.id && n.date === selectedDate)
+    return note?.notes || ''
+  }, [userNotes, user, selectedDate])
+
+  // Sync noteInput when date changes or notes load
+  useEffect(() => {
+    setNoteInput(currentNote)
+  }, [currentNote])
 
   // Friends' status today
   const friendsToday = useMemo(() => {
@@ -607,6 +648,20 @@ function App() {
                 {completedToday}/{totalBuckets}
               </span>
             </div>
+
+            <div className="notes-section">
+              <label htmlFor="day-notes">Notes for the day</label>
+              <textarea
+                id="day-notes"
+                placeholder="How did it go? Any thoughts..."
+                value={noteInput}
+                onChange={(e) => setNoteInput(e.target.value)}
+                onBlur={handleSaveNote}
+                disabled={savingNote}
+                rows={3}
+              />
+              {savingNote && <span className="saving-indicator">Saving...</span>}
+            </div>
           </section>
 
           <section className="friends-section">
@@ -748,7 +803,13 @@ function App() {
                         const uncheckedNames = buckets
                           .filter(b => !checkedBucketIds.has(b.id))
                           .map(b => `○ ${b.name}`)
-                        const tooltipContent = [date, ...checkedNames, ...uncheckedNames]
+                        const friendNote = userNotes.find(n => n.userId === friend.id && n.date === date)
+                        const tooltipContent = [
+                          date,
+                          ...checkedNames,
+                          ...uncheckedNames,
+                          ...(friendNote?.notes ? ['', `"${friendNote.notes}"`] : []),
+                        ]
 
                         let bg = 'var(--border)'
                         if (!isInactive && !loadingMonth) {
