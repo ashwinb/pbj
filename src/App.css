@@ -359,6 +359,19 @@ body {
   font-size: 1.1rem;
 }
 
+.check-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .progress-ring {
   display: flex;
   justify-content: center;

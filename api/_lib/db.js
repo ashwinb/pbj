@@ -6,7 +6,11 @@ const DEFAULT_BUCKETS = [
   { name: 'Stretching / mobility', sortOrder: 3 },
 ]
 
+let schemaEnsured = false
+
 export async function ensureSchema() {
+  if (schemaEnsured) return
+
   await sql`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -70,6 +74,8 @@ export async function ensureSchema() {
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS buckets_name_unique ON buckets (name);
   `
+
+  schemaEnsured = true
 }
 
 export async function seedBuckets() {

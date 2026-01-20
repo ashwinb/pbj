@@ -64,7 +64,7 @@ function App() {
   const [status, setStatus] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMonth, setLoadingMonth] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [savingBuckets, setSavingBuckets] = useState<Set<number>>(new Set())
   const [view, setView] = useState<View>('stats')
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string[]; note?: string } | null>(null)
   const [devEmail, setDevEmail] = useState('')
@@ -327,15 +327,40 @@ function App() {
 
   const handleToggle = async (bucketId: number, checked: boolean) => {
     if (!user) return
-    setSaving(true)
+
+    // Optimistically update local state
+    setEntries(prev => {
+      const existing = prev.find(
+        e => e.userId === user.id && e.bucketId === bucketId && e.date === selectedDate
+      )
+      if (existing) {
+        return prev.map(e =>
+          e.userId === user.id && e.bucketId === bucketId && e.date === selectedDate
+            ? { ...e, checked }
+            : e
+        )
+      } else {
+        return [...prev, { userId: user.id, bucketId, date: selectedDate, checked }]
+      }
+    })
+
+    // Track saving state for this bucket
+    setSavingBuckets(prev => new Set(prev).add(bucketId))
+
     try {
       await fetchJson('/api/checkins', {
         method: 'POST',
         body: JSON.stringify({ bucketId, checked, date: selectedDate }),
       })
+    } catch {
+      // On error, refetch to get correct state
       await loadCheckins(month)
     } finally {
-      setSaving(false)
+      setSavingBuckets(prev => {
+        const next = new Set(prev)
+        next.delete(bucketId)
+        return next
+      })
     }
   }
 
@@ -622,19 +647,20 @@ function App() {
             <div className="checklist">
               {buckets.map((bucket) => {
                 const isChecked = userCheckedBuckets.has(bucket.id)
+                const isSaving = savingBuckets.has(bucket.id)
                 return (
                   <label
                     key={bucket.id}
-                    className={`check-item ${isChecked ? 'checked' : ''} ${saving ? 'saving' : ''}`}
+                    className={`check-item ${isChecked ? 'checked' : ''} ${isSaving ? 'saving' : ''}`}
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={(e) => handleToggle(bucket.id, e.target.checked)}
-                      disabled={saving}
                     />
                     <span className="check-label">{bucket.name}</span>
-                    {isChecked && <span className="check-mark">✓</span>}
+                    {isSaving && <span className="check-spinner" />}
+                    {!isSaving && isChecked && <span className="check-mark">✓</span>}
                   </label>
                 )
               })}
