@@ -224,6 +224,11 @@ async function migrate() {
     console.log('✓ buckets already migrated to per-user')
   }
 
+  // Ensure unique index exists (might be missing from partial migration)
+  if (!DRY_RUN) {
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS buckets_user_name_unique ON buckets(user_id, name);`
+  }
+
   if (DRY_RUN) {
     console.log('\n=== DRY RUN COMPLETE - No changes were made ===')
   } else {
