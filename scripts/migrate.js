@@ -97,8 +97,7 @@ async function migrate() {
         for (const bucket of globalBuckets) {
           await sql`
             INSERT INTO buckets (user_id, name, sort_order)
-            VALUES (${user.id}, ${bucket.name}, ${bucket.sort_order})
-            ON CONFLICT DO NOTHING;
+            VALUES (${user.id}, ${bucket.name}, ${bucket.sort_order});
           `
         }
         console.log(`  ✓ Created buckets for user ${user.id}`)
@@ -111,19 +110,43 @@ async function migrate() {
             SELECT id FROM buckets WHERE user_id = ${user.id} AND name = ${globalBucket.name} LIMIT 1;
           `
           if (userBucket.length > 0) {
-            await sql`
+            const result = await sql`
               UPDATE entries
               SET bucket_id = ${userBucket[0].id}
               WHERE user_id = ${user.id} AND bucket_id = ${globalBucket.id};
             `
+            if (result.rowCount > 0) {
+              console.log(`  ✓ Re-linked ${result.rowCount} entries for user ${user.id}, bucket "${globalBucket.name}"`)
+            }
           }
         }
       }
-      console.log('  ✓ Updated entry references')
 
-      // Delete global buckets
+      // SAFETY CHECK: Verify no entries still reference global buckets
+      const { rows: orphanedEntries } = await sql`
+        SELECT e.id, e.user_id, e.bucket_id, b.name as bucket_name
+        FROM entries e
+        JOIN buckets b ON b.id = e.bucket_id
+        WHERE b.user_id IS NULL;
+      `
+
+      if (orphanedEntries.length > 0) {
+        console.error('  ✗ ABORTING: Found entries still referencing global buckets:')
+        for (const entry of orphanedEntries) {
+          console.error(`    - Entry ${entry.id}: user ${entry.user_id}, bucket "${entry.bucket_name}" (id ${entry.bucket_id})`)
+        }
+        throw new Error('Cannot delete global buckets - entries would be lost. Fix manually.')
+      }
+
+      console.log('  ✓ Verified all entries re-linked')
+
+      // Safe to delete global buckets now
       await sql`DELETE FROM buckets WHERE user_id IS NULL;`
       console.log('  ✓ Removed global buckets')
+    } else if (globalBuckets.length > 0) {
+      // No users exist, just delete the global buckets
+      await sql`DELETE FROM buckets WHERE user_id IS NULL;`
+      console.log('  ✓ Removed global buckets (no users existed)')
     }
 
     // Make user_id NOT NULL
