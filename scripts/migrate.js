@@ -100,8 +100,11 @@ async function migrate() {
 
     if (!DRY_RUN) {
       await sql`ALTER TABLE buckets ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;`
+      // Drop old unique constraint on name alone BEFORE inserting per-user buckets
+      await sql`DROP INDEX IF EXISTS buckets_name_unique;`
     }
     console.log('  ✓ Added user_id column')
+    console.log('  ✓ Dropped old name-only unique constraint')
 
     // Get all existing global buckets and users
     const { rows: globalBuckets } = await sql`SELECT id, name, sort_order FROM buckets WHERE user_id IS NULL;`
@@ -211,10 +214,9 @@ async function migrate() {
       console.log('  ✓ Removed global buckets (no users existed)')
     }
 
-    // Make user_id NOT NULL
+    // Make user_id NOT NULL and add new constraint
     if (!DRY_RUN) {
       await sql`ALTER TABLE buckets ALTER COLUMN user_id SET NOT NULL;`
-      await sql`DROP INDEX IF EXISTS buckets_name_unique;`
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS buckets_user_name_unique ON buckets(user_id, name);`
     }
     console.log('  ✓ Updated constraints')
