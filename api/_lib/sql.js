@@ -14,6 +14,11 @@ function getPool() {
   return pool
 }
 
+// Initialize pool (for scripts that need explicit control)
+export function createPool() {
+  return getPool()
+}
+
 // Tagged template function compatible with @vercel/postgres style
 export function sql(strings, ...values) {
   const text = strings.reduce((acc, str, i) => {

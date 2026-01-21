@@ -6,84 +6,45 @@ const DEFAULT_BUCKETS = [
   { name: 'Stretching / mobility', sortOrder: 3 },
 ]
 
-let schemaEnsured = false
+const MAX_BUCKETS_PER_USER = 5
 
+let schemaVerified = false
+
+/**
+ * Verify schema exists. Does NOT run migrations - use scripts/migrate.js for that.
+ * This is a lightweight check that runs once per cold start.
+ */
 export async function ensureSchema() {
-  if (schemaEnsured) return
+  if (schemaVerified) return
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      image TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
+  // Quick check that required tables exist
+  const { rows } = await sql`
+    SELECT table_name FROM information_schema.tables
+    WHERE table_schema = 'public'
+    AND table_name IN ('users', 'buckets', 'entries', 'sessions', 'user_notes');
   `
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS buckets (
-      id SERIAL PRIMARY KEY,
-      name TEXT NOT NULL,
-      sort_order INTEGER DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `
+  if (rows.length < 5) {
+    throw new Error('Database schema not initialized. Run: node scripts/migrate.js')
+  }
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS entries (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      bucket_id INTEGER REFERENCES buckets(id) ON DELETE CASCADE,
-      date DATE NOT NULL,
-      checked BOOLEAN NOT NULL DEFAULT TRUE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (user_id, bucket_id, date)
-    );
-  `
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      token_hash TEXT UNIQUE NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-  `
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS user_notes (
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      date DATE NOT NULL,
-      notes TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (user_id, date)
-    );
-  `
-
-  // Clean up duplicate buckets and add unique constraint
-  await sql`
-    DELETE FROM buckets
-    WHERE id NOT IN (
-      SELECT MIN(id) FROM buckets GROUP BY name
-    );
-  `
-
-  await sql`
-    CREATE UNIQUE INDEX IF NOT EXISTS buckets_name_unique ON buckets (name);
-  `
-
-  schemaEnsured = true
+  schemaVerified = true
 }
 
-export async function seedBuckets() {
+// Seed default buckets for a specific user (called on user creation)
+export async function seedBucketsForUser(userId) {
+  const { rows: existingBuckets } = await sql`
+    SELECT id FROM buckets WHERE user_id = ${userId} LIMIT 1;
+  `
+
+  // Only seed if user has no buckets
+  if (existingBuckets.length > 0) return
+
   for (const bucket of DEFAULT_BUCKETS) {
     await sql`
-      INSERT INTO buckets (name, sort_order)
-      VALUES (${bucket.name}, ${bucket.sortOrder})
-      ON CONFLICT (name) DO NOTHING;
+      INSERT INTO buckets (user_id, name, sort_order)
+      VALUES (${userId}, ${bucket.name}, ${bucket.sortOrder})
+      ON CONFLICT (user_id, name) DO NOTHING;
     `
   }
 }
@@ -91,5 +52,11 @@ export async function seedBuckets() {
 export async function resetData() {
   await sql`DELETE FROM entries;`
   await sql`DELETE FROM buckets;`
-  await seedBuckets()
+  // After reset, each user needs buckets re-seeded
+  const { rows: allUsers } = await sql`SELECT id FROM users;`
+  for (const user of allUsers) {
+    await seedBucketsForUser(user.id)
+  }
 }
+
+export { DEFAULT_BUCKETS, MAX_BUCKETS_PER_USER }

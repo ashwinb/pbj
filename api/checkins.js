@@ -32,7 +32,7 @@ export default async function handler(req, res) {
 
     const { start, end } = monthBounds(month)
 
-    const [usersResult, entriesResult, notesResult] = await Promise.all([
+    const [usersResult, entriesResult, notesResult, bucketsResult] = await Promise.all([
       sql`
         SELECT id, email, name, image
         FROM users
@@ -53,18 +53,33 @@ export default async function handler(req, res) {
         FROM user_notes
         WHERE date BETWEEN ${start} AND ${end};
       `,
+      // Get all buckets for all users (needed for friend display)
+      sql`
+        SELECT id, user_id AS "userId", name, sort_order AS "sortOrder"
+        FROM buckets
+        ORDER BY user_id, sort_order ASC, id ASC;
+      `,
     ])
 
     return sendJson(res, 200, {
       users: usersResult.rows,
       entries: entriesResult.rows,
       notes: notesResult.rows,
+      buckets: bucketsResult.rows,
     })
   }
 
   const payload = req.body || await readJson(req)
   if (!payload?.bucketId || !payload?.date) {
     return sendJson(res, 400, { error: 'bucketId and date required' })
+  }
+
+  // Verify bucket ownership
+  const { rows: bucketCheck } = await sql`
+    SELECT id FROM buckets WHERE id = ${payload.bucketId} AND user_id = ${auth.user.id};
+  `
+  if (bucketCheck.length === 0) {
+    return sendJson(res, 404, { error: 'Bucket not found' })
   }
 
   const checked = payload.checked !== false

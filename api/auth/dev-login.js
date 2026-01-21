@@ -1,5 +1,5 @@
 import { sql } from '../_lib/sql.js'
-import { ensureSchema } from '../_lib/db.js'
+import { ensureSchema, seedBucketsForUser } from '../_lib/db.js'
 import { createSession, setSessionCookie } from '../_lib/auth.js'
 import { readJson, sendJson, methodNotAllowed } from '../_lib/http.js'
 
@@ -37,6 +37,8 @@ export default async function handler(req, res) {
       RETURNING id, email, name, image
     `
     user = result.rows[0]
+    // Seed default buckets for new user
+    await seedBucketsForUser(user.id)
   } else {
     user = rows[0]
   }

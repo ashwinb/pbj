@@ -1,6 +1,6 @@
 import { OAuth2Client } from 'google-auth-library'
 import { sql } from '../_lib/sql.js'
-import { ensureSchema } from '../_lib/db.js'
+import { ensureSchema, seedBucketsForUser } from '../_lib/db.js'
 import { createSession, isAllowedEmail, setSessionCookie } from '../_lib/auth.js'
 import { readJson, sendJson, methodNotAllowed } from '../_lib/http.js'
 
@@ -45,6 +45,10 @@ export default async function handler(req, res) {
   `
 
   const user = rows[0]
+
+  // Seed default buckets for new users
+  await seedBucketsForUser(user.id)
+
   const { token, expiresAt } = await createSession(user.id)
   setSessionCookie(res, token, expiresAt)
 
