@@ -254,8 +254,7 @@ async function seedDefaultBuckets() {
       for (const bucket of DEFAULT_BUCKETS) {
         await sql`
           INSERT INTO buckets (user_id, name, sort_order)
-          VALUES (${user.id}, ${bucket.name}, ${bucket.sortOrder})
-          ON CONFLICT (user_id, name) DO NOTHING;
+          VALUES (${user.id}, ${bucket.name}, ${bucket.sortOrder});
         `
       }
     }
