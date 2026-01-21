@@ -224,8 +224,9 @@ async function migrate() {
     console.log('✓ buckets already migrated to per-user')
   }
 
-  // Ensure unique index exists (might be missing from partial migration)
+  // Cleanup from partial migrations: drop old constraint, ensure new one exists
   if (!DRY_RUN) {
+    await sql`DROP INDEX IF EXISTS buckets_name_unique;`
     await sql`CREATE UNIQUE INDEX IF NOT EXISTS buckets_user_name_unique ON buckets(user_id, name);`
   }
 
